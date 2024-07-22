@@ -1,0 +1,79 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% block content %}
+    <div class="dashboard">
+        <h1 class="dashboard-title">Admin Dashboard</h1>
+
+        <div class="dashboard-widgets">
+            <div class="widget">
+                <h2>Total Users</h2>
+                <p class="widget-value">{{ total_users }}</p>
+            </div>
+            <div class="widget">
+                <h2>New Users Today</h2>
+                <p class="widget-value">{{ new_users_today }}</p>
+            </div>
+        </div>
+
+        <div class="custom-content">
+            <h2>Welcome to the Admin Dashboard</h2>
+            <p>This is your custom admin dashboard. You can add more widgets, charts, and other elements to enhance the functionality.</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        // Custom JavaScript if needed
+    </script>
+{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        .dashboard {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+        }
+        .dashboard-title {
+            margin-bottom: 20px;
+            font-size: 2em;
+            text-align: center;
+        }
+        .dashboard-widgets {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .widget {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            width: 30%;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .widget h2 {
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        .widget-value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .custom-content {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .custom-content h2 {
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+    </style>
+{% endblock %}
