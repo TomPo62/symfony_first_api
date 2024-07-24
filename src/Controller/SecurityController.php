@@ -29,4 +29,10 @@ class SecurityController extends AbstractController
     {
         throw new \LogicException('This method can be blank - it will be intercepted by the logout key on your firewall.');
     }
+
+    #[Route(path: '/api/logout', name: 'api_logout', methods: ['POST'])]
+    public function apiLogout(): Response
+    {
+        return new Response(null, 204);
+    }
 }

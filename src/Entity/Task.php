@@ -3,11 +3,24 @@
 namespace App\Entity;
 
 use App\Repository\TaskRepository;
+
 use Doctrine\ORM\Mapping as ORM;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\Put;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Delete;
 
 #[ORM\Entity(repositoryClass: TaskRepository::class)]
 #[ApiResource]
+#[Get]
+#[GetCollection]
+#[Put(security:"is_granted('ROLE_ADMIN')")]
+#[Post(security:"is_granted('ROLE_ADMIN')")]
+#[Patch(security:"is_granted('ROLE_ADMIN')")]
+#[Delete(security:"is_granted('ROLE_ADMIN')")]
 class Task
 {
     #[ORM\Id]

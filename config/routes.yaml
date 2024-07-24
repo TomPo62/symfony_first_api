@@ -7,6 +7,10 @@ controllers:
 api_login_check:
     path: /api/login_check
 
+api_logout:
+    path: /api/logout
+    controller: App\Controller\SecurityController::apiLogout
+
 dashboard:
     path: /admin
     controller: App\Controller\Admin\DashboardController::index

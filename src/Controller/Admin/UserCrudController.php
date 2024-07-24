@@ -3,20 +3,19 @@
 namespace App\Controller\Admin;
 
 use App\Entity\User;
+use EasyCorp\Bundle\EasyAdminBundle\Config\{Action, Actions, Crud, KeyValueStore};
+use EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
+use EasyCorp\Bundle\EasyAdminBundle\Dto\EntityDto;
+use EasyCorp\Bundle\EasyAdminBundle\Field\{BooleanField, ChoiceField, IdField, EmailField, TextField};
+use Symfony\Component\Form\Extension\Core\Type\{PasswordType, RepeatedType};
+use Symfony\Component\Form\{FormBuilderInterface, FormEvent, FormEvents};
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Doctrine\ORM\EntityManagerInterface;
 
 class UserCrudController extends AbstractCrudController
 {
-    private $passwordHasher;
-
-    public function __construct(UserPasswordHasherInterface $passwordHasher)
+    public function __construct(private UserPasswordHasherInterface $userPasswordHasher)
     {
-        $this->passwordHasher = $passwordHasher;
     }
 
     public static function getEntityFqcn(): string
@@ -24,54 +23,70 @@ class UserCrudController extends AbstractCrudController
         return User::class;
     }
 
+    public function configureActions(Actions $actions): Actions
+    {
+        return $actions
+            ->add(Crud::PAGE_EDIT, Action::INDEX)
+            ->add(Crud::PAGE_INDEX, Action::DETAIL)
+            ->add(Crud::PAGE_EDIT, Action::DETAIL)
+            ->setPermission(Action::DELETE, 'ROLE_ADMIN');
+    }
+
     public function configureFields(string $pageName): iterable
     {
-        return [
+        $fields = [
+            IdField::new('id')->hideOnForm(),
             EmailField::new('email'),
-            ChoiceField::new('roles')
-                ->setChoices([
-                    'Admin' => 'ROLE_ADMIN',
-                    'User' => 'ROLE_USER',
-                ])
-                ->allowMultipleChoices()
-                ->renderExpanded(),
-            TextField::new('password')->onlyOnForms(),
+            // ChoiceField::new('roles')->hideOnForm()->allowMultipleChoices(),
+            BooleanField::new('isverified')
         ];
+
+        $password = TextField::new('password')
+            ->setFormType(RepeatedType::class)
+            ->setFormTypeOptions([
+                'type' => PasswordType::class,
+                'first_options' => ['label' => 'Password'],
+                'second_options' => ['label' => '(Repeat)'],
+                'mapped' => false,
+            ])
+            ->setRequired($pageName === Crud::PAGE_NEW)
+            ->onlyOnForms();
+        $fields[] = $password;
+
+        return $fields;
     }
 
-    private function ensureUserRole(User $user)
+    public function createNewFormBuilder(EntityDto $entityDto, KeyValueStore $formOptions, AdminContext $context): FormBuilderInterface
     {
-        $roles = $user->getRoles();
-        if (!in_array('ROLE_USER', $roles, true)) {
-            $roles[] = 'ROLE_USER';
-            $user->setRoles($roles);
-        }
+        $formBuilder = parent::createNewFormBuilder($entityDto, $formOptions, $context);
+        return $this->addPasswordEventListener($formBuilder);
     }
 
-    public function persistEntity(EntityManagerInterface $entityManager, $entityInstance): void
+    public function createEditFormBuilder(EntityDto $entityDto, KeyValueStore $formOptions, AdminContext $context): FormBuilderInterface
     {
-        if (!$entityInstance instanceof User) {
-            return;
-        }
-
-        // Hacher le mot de passe si nécessaire
-        if ($entityInstance->getPassword()) {
-            $hashedPassword = $this->passwordHasher->hashPassword(
-                $entityInstance,
-                $entityInstance->getPassword()
-            );
-            $entityInstance->setPassword($hashedPassword);
-        }
-
-        // Assurez-vous que le rôle 'ROLE_USER' est toujours présent
-        $this->ensureUserRole($entityInstance);
-
-        $entityManager->persist($entityInstance);
-        $entityManager->flush();
+        $formBuilder = parent::createEditFormBuilder($entityDto, $formOptions, $context);
+        return $this->addPasswordEventListener($formBuilder);
     }
 
-    public function updateEntity(EntityManagerInterface $entityManager, $entityInstance): void
+    private function addPasswordEventListener(FormBuilderInterface $formBuilder): FormBuilderInterface
     {
-        $this->persistEntity($entityManager, $entityInstance);
+        return $formBuilder->addEventListener(FormEvents::POST_SUBMIT, $this->hashPassword());
+    }
+
+    private function hashPassword()
+    {
+        return function ($event) {
+            $form = $event->getForm();
+            if (!$form->isValid()) {
+                return;
+            }
+            $password = $form->get('password')->getData();
+            if ($password === null) {
+                return;
+            }
+
+            $hash = $this->userPasswordHasher->hashPassword($form->getData(), $password);
+            $form->getData()->setPassword($hash);
+        };
     }
 }
