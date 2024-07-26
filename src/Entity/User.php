@@ -29,7 +29,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?string $password = null;
 
     #[ORM\Column]
-    private bool $isVerified = false;
+    private bool $isActive = false;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $confirmationToken = null;
 
     public function getId(): ?int
     {
@@ -80,14 +83,26 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         // $this->plainPassword = null;
     }
 
-    public function isVerified(): bool
+    public function isActive(): bool
     {
-        return $this->isVerified;
+        return $this->isActive;
     }
 
-    public function setIsVerified(bool $isVerified): static
+    public function setIsActive(bool $isActive): static
     {
-        $this->isVerified = $isVerified;
+        $this->isVerified = $isActive;
+
+        return $this;
+    }
+
+    public function getConfirmationToken(): ?string
+    {
+        return $this->confirmationToken;
+    }
+
+    public function setConfirmationToken(?string $confirmationToken): static
+    {
+        $this->confirmationToken = $confirmationToken;
 
         return $this;
     }

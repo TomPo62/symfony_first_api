@@ -3,83 +3,86 @@
 namespace App\Controller;
 
 use App\Entity\User;
-use App\Form\RegistrationFormType;
-use App\Security\EmailVerifier;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Mime\Address;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Contracts\Translation\TranslatorInterface;
-use SymfonyCasts\Bundle\VerifyEmail\Exception\VerifyEmailExceptionInterface;
+use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 class RegistrationController extends AbstractController
 {
-    public function __construct(private EmailVerifier $emailVerifier)
+    private $entityManager;
+    private $passwordHasher;
+    private $validator;
+    private $mailer;
+    private $router;
+
+    public function __construct(EntityManagerInterface $entityManager, UserPasswordHasherInterface $passwordHasher, ValidatorInterface $validator, MailerInterface $mailer, UrlGeneratorInterface $router)
     {
+        $this->entityManager = $entityManager;
+        $this->passwordHasher = $passwordHasher;
+        $this->validator = $validator;
+        $this->mailer = $mailer;
+        $this->router = $router;
     }
 
-    #[Route('/register', name: 'app_register')]
-    public function register(Request $request, UserPasswordHasherInterface $userPasswordHasher, Security $security, EntityManagerInterface $entityManager): Response
+    #[Route(path: "/api/register", name: "api_register", methods: "POST")]
+    public function register(Request $request): JsonResponse
     {
+        $data = json_decode($request->getContent(), true);
+
         $user = new User();
-        $form = $this->createForm(RegistrationFormType::class, $user);
-        $form->handleRequest($request);
+        $user->setEmail($data['email']);
+        $user->setPassword(
+            $this->passwordHasher->hashPassword(
+                $user,
+                $data['password']
+            )
+        );
+        $user->setRoles(['ROLE_USER']);
+        $user->setConfirmationToken(bin2hex(random_bytes(32)));
 
-        if ($form->isSubmitted() && $form->isValid()) {
-            // encode the plain password
-            $user->setPassword(
-                $userPasswordHasher->hashPassword(
-                    $user,
-                    $form->get('plainPassword')->getData()
-                )
-            );
+        $errors = $this->validator->validate($user);
+        if (count($errors) > 0) {
+            $errorsString = (string) $errors;
 
-            $entityManager->persist($user);
-            $entityManager->flush();
-
-            // generate a signed url and email it to the user
-            $this->emailVerifier->sendEmailConfirmation('app_verify_email', $user,
-                (new TemplatedEmail())
-                    ->from(new Address('contact@admin.com', 'Admin'))
-                    ->to($user->getEmail())
-                    ->subject('Please Confirm your Email')
-                    ->htmlTemplate('registration/confirmation_email.html.twig')
-            );
-
-            // do anything else you need here, like send an email
-
-            return $security->login($user, 'form_login', 'main');
+            return new JsonResponse(['error' => $errorsString], JsonResponse::HTTP_BAD_REQUEST);
         }
 
+        $this->entityManager->persist($user);
+        $this->entityManager->flush();
 
+        // $confirmationUrl = $this->router->generate('api_confirm_email', ['token' => $user->getConfirmationToken()], UrlGeneratorInterface::ABSOLUTE_URL);
 
-        return $this->render('registration/register.html.twig', [
-            'registrationForm' => $form,
-        ]);
+        $email = (new Email())
+            ->from('no-reply@votre-domaine.com')
+            ->to($user->getEmail())
+            ->subject('Confirmez votre inscription')
+            ->html(sprintf('Cliquez sur le lien suivant pour confirmer votre inscription : <a href="http://localhost:5173/confirmEmail/%s">Confirmer mon email</a>', $user->getConfirmationToken()));
+
+        $this->mailer->send($email);
+
+        return new JsonResponse(['status' => 'User created, confirmation email sent!'], JsonResponse::HTTP_CREATED);
     }
 
-    #[Route('/verify/email', name: 'app_verify_email')]
-    public function verifyUserEmail(Request $request, TranslatorInterface $translator): Response
+    #[Route(path: "/api/confirm-email/{token}", name: "api_confirm_email", methods: "GET")]
+    public function confirmEmail(string $token): JsonResponse
     {
-        $this->denyAccessUnlessGranted('IS_AUTHENTICATED_FULLY');
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['confirmationToken' => $token]);
 
-        // validate email confirmation link, sets User::isVerified=true and persists
-        try {
-            $this->emailVerifier->handleEmailConfirmation($request, $this->getUser());
-        } catch (VerifyEmailExceptionInterface $exception) {
-            $this->addFlash('verify_email_error', $translator->trans($exception->getReason(), [], 'VerifyEmailBundle'));
-
-            return $this->redirectToRoute('app_register');
+        if (!$user) {
+            return new JsonResponse(['error' => 'Invalid token'], JsonResponse::HTTP_BAD_REQUEST);
         }
 
-        // @TODO Change the redirect on success and handle or remove the flash message in your templates
-        $this->addFlash('success', 'Your email address has been verified.');
+        $user->setIsActive(true);
+        $user->setConfirmationToken(null);
+        $this->entityManager->flush();
 
-        return $this->redirectToRoute('app_register');
+        return new JsonResponse(['status' => 'User confirmed!'], JsonResponse::HTTP_OK);
     }
 }
